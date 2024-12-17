@@ -4,3 +4,4 @@ transformers==4.37.2
 accelerate==0.26.1
 peft==0.5.0
 firebase-admin==6.3.0
+numpy<2.0
