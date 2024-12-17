@@ -37,15 +37,17 @@ def load_model():
         # Model path (change to relative paths or environment variable)
         model_path = os.environ.get("MODEL_PATH", "./mistralv2_saved_model_bigv2")
         tokenizer_path = os.environ.get("TOKENIZER_PATH", "./mistralv2_saved_model_tokenized_bigv2")
-        
+
+        # Use 'cpu' explicitly when loading the model for CPU support
+        device = torch.device("cpu")
+
         # Load the model with authentication token
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             use_auth_token=hf_token,  # Pass the Hugging Face token here
-            load_in_4bit=True,
-            torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True,
+            load_in_4bit=False,  # Disable 4-bit loading for CPU
+            torch_dtype=torch.float32,  # Use float32 for CPU
+            device_map=None  # Set to None to avoid GPU-specific setup
         )
 
         # Prepare the model for LoRA fine-tuning
@@ -62,6 +64,9 @@ def load_model():
 
         # Load the tokenizer with authentication token
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)  # Pass the token here
+
+        # Move model to CPU
+        model.to(device)
 
         return True
     except Exception as e:
@@ -81,7 +86,8 @@ def generate_response(user_input):
             padding=True
         )
 
-        device = model.device
+        # Ensure inputs and model are on the same device (CPU)
+        device = torch.device("cpu")  # Use CPU explicitly
         input_ids = inputs["input_ids"].to(device)
         attention_mask = inputs["attention_mask"].to(device)
 
