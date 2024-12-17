@@ -38,19 +38,19 @@ def load_model():
         model_path = os.environ.get("MODEL_PATH", "./mistralv2_saved_model_bigv2")
         tokenizer_path = os.environ.get("TOKENIZER_PATH", "./mistralv2_saved_model_tokenized_bigv2")
 
-        # Use 'cpu' explicitly when loading the model for CPU support
-        device = torch.device("cpu")
+        # Check for available device (GPU or CPU)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load the model with authentication token
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             use_auth_token=hf_token,  # Pass the Hugging Face token here
-            load_in_4bit=False,  # Disable 4-bit loading for CPU
-            torch_dtype=torch.float32,  # Use float32 for CPU
+            load_in_4bit=False,  # Disable 4-bit loading if not using GPU
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,  # Use float16 for GPU, float32 for CPU
             device_map=None  # Set to None to avoid GPU-specific setup
         )
 
-        # Prepare the model for LoRA fine-tuning
+        # Prepare the model for LoRA fine-tuning (this can also be adjusted depending on device)
         model = prepare_model_for_kbit_training(model)
         lora_config = LoraConfig(
             r=8,
@@ -63,9 +63,9 @@ def load_model():
         model = get_peft_model(model, lora_config)
 
         # Load the tokenizer with authentication token
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)  # Pass the token here
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)
 
-        # Move model to CPU
+        # Move model to the appropriate device (GPU or CPU)
         model.to(device)
 
         return True
@@ -86,8 +86,8 @@ def generate_response(user_input):
             padding=True
         )
 
-        # Ensure inputs and model are on the same device (CPU)
-        device = torch.device("cpu")  # Use CPU explicitly
+        # Ensure inputs and model are on the same device (GPU or CPU)
+        device = model.device  # Model's device (either GPU or CPU)
         input_ids = inputs["input_ids"].to(device)
         attention_mask = inputs["attention_mask"].to(device)
 
@@ -107,6 +107,7 @@ def generate_response(user_input):
         chatbot_response = response.split("Chatbot:")[-1].strip()
         conversation_history += f" {chatbot_response}\n"
 
+        # Limit conversation history length to avoid overloading the model
         max_history_length = 1024
         if len(conversation_history) > max_history_length:
             conversation_history = conversation_history[-max_history_length:]
