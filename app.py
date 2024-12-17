@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import os
 import firebase_admin
@@ -38,19 +37,19 @@ def load_model():
         model_path = os.environ.get("MODEL_PATH", "./mistralv2_saved_model_bigv2")
         tokenizer_path = os.environ.get("TOKENIZER_PATH", "./mistralv2_saved_model_tokenized_bigv2")
 
-        # Check for available device (GPU or CPU)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Force CPU usage
+        device = torch.device("cpu")
 
-        # Load the model with authentication token
+        # Load the model with CPU optimizations
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            use_auth_token=hf_token,  # Pass the Hugging Face token here
-            load_in_4bit=False,  # Disable 4-bit loading if not using GPU
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,  # Use float16 for GPU, float32 for CPU
-            device_map=None  # Set to None to avoid GPU-specific setup
+            use_auth_token=hf_token,
+            load_in_4bit=False,
+            torch_dtype=torch.float32,  # Use float32 for CPU
+            device_map="cpu"  # Explicitly map to CPU
         )
 
-        # Prepare the model for LoRA fine-tuning (this can also be adjusted depending on device)
+        # Prepare the model for LoRA fine-tuning
         model = prepare_model_for_kbit_training(model)
         lora_config = LoraConfig(
             r=8,
@@ -65,7 +64,7 @@ def load_model():
         # Load the tokenizer with authentication token
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)
 
-        # Move model to the appropriate device (GPU or CPU)
+        # Ensure model is on CPU
         model.to(device)
 
         return True
@@ -78,28 +77,30 @@ def generate_response(user_input):
     try:
         conversation_history += f"User: {user_input}\nChatbot:"
 
+        # Reduce input length for CPU processing
         inputs = tokenizer(
             conversation_history,
             return_tensors="pt",
             truncation=True,
-            max_length=1024,
+            max_length=512,  # Reduced from 1024
             padding=True
         )
 
-        # Ensure inputs and model are on the same device (GPU or CPU)
-        device = model.device  # Model's device (either GPU or CPU)
+        # Ensure inputs and model are on the CPU
+        device = torch.device("cpu")
         input_ids = inputs["input_ids"].to(device)
         attention_mask = inputs["attention_mask"].to(device)
 
+        # Reduce generation parameters for CPU
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            max_new_tokens=150,
+            max_new_tokens=100,  # Reduced from 150
             do_sample=True,
-            temperature=0.9,
-            top_k=50,
-            top_p=0.95,
-            repetition_penalty=1.2,
+            temperature=0.7,  # Slightly reduced
+            top_k=40,  # Reduced from 50
+            top_p=0.9,  # Slightly reduced
+            repetition_penalty=1.1,
             pad_token_id=tokenizer.pad_token_id
         )
 
@@ -107,8 +108,8 @@ def generate_response(user_input):
         chatbot_response = response.split("Chatbot:")[-1].strip()
         conversation_history += f" {chatbot_response}\n"
 
-        # Limit conversation history length to avoid overloading the model
-        max_history_length = 1024
+        # Limit conversation history length more strictly for CPU
+        max_history_length = 512
         if len(conversation_history) > max_history_length:
             conversation_history = conversation_history[-max_history_length:]
 
