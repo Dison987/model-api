@@ -8,13 +8,15 @@ import firebase_admin
 from firebase_admin import credentials, auth
 import json
 
-# Load Firebase credentials from environment variables
-firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
-if firebase_credentials:
-    cred = credentials.Certificate(json.loads(firebase_credentials))
+# Path to Firebase credentials JSON file
+firebase_credentials_path = './fyp-db-4e0f7-firebase-adminsdk-ihmo0-a1f109394e.json'
+
+# Load Firebase credentials from JSON file
+if os.path.exists(firebase_credentials_path):
+    cred = credentials.Certificate(firebase_credentials_path)
     firebase_admin.initialize_app(cred)
 else:
-    raise ValueError("FIREBASE_CREDENTIALS environment variable is missing")
+    raise ValueError(f"Firebase credentials file not found at {firebase_credentials_path}")
 
 app = Flask(__name__)
 
