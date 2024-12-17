@@ -23,6 +23,9 @@ app = Flask(__name__)
 # Global conversation history
 conversation_history = ""
 
+# Hugging Face token
+hf_token = "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"
+
 def reset_chat():
     """Resets the global conversation history"""
     global conversation_history
@@ -35,9 +38,10 @@ def load_model():
         model_path = os.environ.get("MODEL_PATH", "./mistralv2_saved_model_bigv2")
         tokenizer_path = os.environ.get("TOKENIZER_PATH", "./mistralv2_saved_model_tokenized_bigv2")
         
-        # Load the model
+        # Load the model with authentication token
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
+            use_auth_token=hf_token,  # Pass the Hugging Face token here
             load_in_4bit=True,
             torch_dtype=torch.float16,
             device_map="auto",
@@ -56,8 +60,8 @@ def load_model():
         )
         model = get_peft_model(model, lora_config)
 
-        # Load the tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        # Load the tokenizer with authentication token
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)  # Pass the token here
 
         return True
     except Exception as e:
