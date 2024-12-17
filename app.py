@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 import os
 import firebase_admin
 from firebase_admin import credentials, auth
@@ -40,26 +39,14 @@ def load_model():
         # Force CPU usage
         device = torch.device("cpu")
 
-        # Load the model with CPU optimizations
+        # Load the model with full precision (float32) and avoid any quantization or LoRA fine-tuning
         model = AutoModelForCausalLM.from_pretrained(
             model_path,
             use_auth_token=hf_token,
-            load_in_4bit=False,
-            torch_dtype=torch.float32,  # Use float32 for CPU
+            load_in_4bit=False,  # Avoid 4-bit loading (no quantization)
+            torch_dtype=torch.float32,  # Use full precision for CPU
             device_map="cpu"  # Explicitly map to CPU
         )
-
-        # Prepare the model for LoRA fine-tuning
-        model = prepare_model_for_kbit_training(model)
-        lora_config = LoraConfig(
-            r=8,
-            lora_alpha=32,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM"
-        )
-        model = get_peft_model(model, lora_config)
 
         # Load the tokenizer with authentication token
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_auth_token=hf_token)
@@ -82,7 +69,7 @@ def generate_response(user_input):
             conversation_history,
             return_tensors="pt",
             truncation=True,
-            max_length=512,  # Reduced from 1024
+            max_length=512,  # Reduced from 1024 for performance
             padding=True
         )
 
@@ -95,7 +82,7 @@ def generate_response(user_input):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            max_new_tokens=100,  # Reduced from 150
+            max_new_tokens=100,  # Reduced from 150 for performance
             do_sample=True,
             temperature=0.7,  # Slightly reduced
             top_k=40,  # Reduced from 50
